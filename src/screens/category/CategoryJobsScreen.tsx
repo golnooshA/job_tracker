@@ -1,5 +1,12 @@
 import React, { useMemo, useEffect, useState } from "react";
-import { View, Text, ScrollView, Pressable, StyleSheet, ActivityIndicator } from "react-native";
+import {
+  View,
+  Text,
+  ScrollView,
+  Pressable,
+  StyleSheet,
+  ActivityIndicator,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute } from "@react-navigation/native";
@@ -24,12 +31,11 @@ import {
   getDoc,
   getFirestore,
   orderBy,
-  Unsubscribe,
 } from "firebase/firestore";
-import { app } from "../../lib/firebase";
+import { onAuthStateChanged } from "firebase/auth";
+import { app, auth } from "../../lib/firebase";
 import { useBookmarks } from "../../hooks/useBookmarks";
 
-// map key -> numeric categoryId used in Firestore
 const CATEGORY_ID_MAP: Record<string, number> = {
   design: 1,
   developer: 2,
@@ -45,19 +51,21 @@ type Row = { vm: JobCardVM; job: Job; company?: Company };
 
 const CategoryJobsScreen: React.FC = () => {
   const nav = useNavigation();
-  const route = useRoute<R>();
-  const { key, label } = route.params;
+  const { key, label } = useRoute<R>().params;
 
   const { theme: t } = useDesign();
-  const styles = useMemo(() => makeStyles(t), [t]);
+  const s = useMemo(() => makeStyles(t), [t]);
 
   const db = getFirestore(app);
+  const [uid, setUid] = useState<string | null>(auth.currentUser?.uid ?? null);
+  useEffect(() => onAuthStateChanged(auth, (u) => setUid(u?.uid ?? null)), []);
+  const { isBookmarked, toggleBookmark } = useBookmarks({
+    userId: uid ?? "__guest__",
+  });
+
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // bookmarks (shared)
-  const { isBookmarked, toggleBookmark } = useBookmarks();
 
   useEffect(() => {
     setLoading(true);
@@ -70,39 +78,41 @@ const CategoryJobsScreen: React.FC = () => {
       return;
     }
 
-    const q = query(
+    const qy = query(
       collection(db, "jobs").withConverter(jobConverter),
       where("categoryId", "==", categoryId),
       orderBy("publishedDate", "desc")
     );
 
-    const unsub: Unsubscribe = onSnapshot(
-      q,
+    const unsub = onSnapshot(
+      qy,
       async (snap) => {
-        const companyCache = new Map<string, Company>();
+        const cache = new Map<string, Company>();
         const next: Row[] = [];
 
         for (const d of snap.docs) {
           const j = d.data() as Job;
 
-          // fetch & cache company
           let company: Company | undefined;
-          if (j.companyId != null) {
-            const k = String(j.companyId);
-            if (companyCache.has(k)) {
-              company = companyCache.get(k);
-            } else {
-              const cRef = doc(db, "companies", k).withConverter(companyConverter);
+          const cid = j.companyId != null ? String(j.companyId) : undefined;
+          if (cid) {
+            if (cache.has(cid)) company = cache.get(cid);
+            else {
+              const cRef = doc(db, "companies", cid).withConverter(
+                companyConverter
+              );
               const cSnap = await getDoc(cRef);
               if (cSnap.exists()) {
                 company = cSnap.data() as Company;
-                companyCache.set(k, company);
+                cache.set(cid, company);
               }
             }
           }
 
           const companyName = company?.name ?? "Unknown";
-          const [city = "", country = ""] = (j.location ?? "").split(",").map((s) => s.trim());
+          const [city = "", country = ""] = (j.location ?? "")
+            .split(",")
+            .map((s) => s.trim());
 
           const vm: JobCardVM = {
             id: j.id,
@@ -130,8 +140,8 @@ const CategoryJobsScreen: React.FC = () => {
       (err) => {
         setError(
           (err as any)?.code === "failed-precondition"
-            ? "This query needs a Firestore composite index. Open the console link from your logs to create it, then retry."
-            : "Failed to load jobs. Please try again."
+            ? "This query needs a Firestore composite index. Create it in the console, then retry."
+            : "Failed to load jobs."
         );
         setLoading(false);
       }
@@ -141,32 +151,42 @@ const CategoryJobsScreen: React.FC = () => {
   }, [db, key, isBookmarked]);
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={s.container}>
       {/* Header */}
-      <View style={styles.header}>
-        <Pressable onPress={() => nav.goBack()} hitSlop={8} style={styles.backBtn}>
+      <View style={s.header}>
+        <Pressable onPress={() => nav.goBack()} hitSlop={8} style={s.backBtn}>
           <Ionicons name="arrow-back" size={rs.ms(22)} color={t.textColor} />
         </Pressable>
-        <Text style={styles.title}>{label}</Text>
-        <View style={styles.headerRightSpacer} />
+        <Text style={s.title}>{label}</Text>
+        <View style={s.headerRightSpacer} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.listContainer} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={s.listContainer}
+        showsVerticalScrollIndicator={false}
+      >
         {loading ? (
           <View style={{ paddingVertical: rs.ms(24) }}>
             <ActivityIndicator color={t.primaryColor} />
           </View>
         ) : error ? (
-          <Text style={[styles.count, { color: t.dangerColor ?? "#f55" }]}>{error}</Text>
+          <Text style={[s.count, { color: t.dangerColor ?? "#f55" }]}>
+            {error}
+          </Text>
         ) : (
-          <Text style={styles.count}>{rows.length} Jobs Found</Text>
+          <Text style={s.count}>{rows.length} Jobs Found</Text>
         )}
 
-        {rows.map(({ vm, job, company }) => (
+        {rows.map(({ vm, job }) => (
           <JobCard
             key={vm.id}
             job={{ ...vm, bookmarked: isBookmarked(vm.id) }}
-            onPress={() => nav.navigate("JobDetail", { job, company })}
+            onPress={() =>
+              nav.navigate("JobDetail", {
+                jobId: job.id,
+                companyId: job.companyId != null ? String(job.companyId) : null,
+              })
+            }
             onBookmark={(id, next) => toggleBookmark(id, next)}
           />
         ))}
@@ -189,7 +209,6 @@ const makeStyles = (t: Themed) =>
       paddingHorizontal: rs.ms(16),
       paddingTop: rs.ms(4),
       paddingBottom: rs.ms(10),
-      backgroundColor: t.backgroundColor,
     },
     backBtn: { padding: rs.ms(4) },
     title: { color: t.textColor, fontSize: t.h4, fontWeight: t.bold },

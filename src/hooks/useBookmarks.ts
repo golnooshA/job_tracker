@@ -1,7 +1,8 @@
 // src/hooks/useBookmarks.ts
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { auth, db } from "../lib/firebase";
+import { onAuthStateChanged } from "firebase/auth";
 import {
-  getFirestore,
   collection,
   query,
   where,
@@ -11,24 +12,28 @@ import {
   deleteDoc,
   serverTimestamp,
 } from "firebase/firestore";
-import { app } from "../lib/firebase";
 
-type UseBookmarksOpts = { userId?: string };
-const DEFAULT_USER_ID = "1";
-
-export function useBookmarks(opts?: UseBookmarksOpts) {
-  const userId = opts?.userId ?? DEFAULT_USER_ID;
-  const db = getFirestore(app);
-
+export function useBookmarks() {
+  const [uid, setUid] = useState<string | null>(auth.currentUser?.uid ?? null);
   const [ids, setIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
 
+  // sync with auth state
   useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (u) => setUid(u?.uid ?? null));
+    return unsub;
+  }, []);
+
+  // subscribe to only this user's bookmarks
+  useEffect(() => {
+    if (!uid) {
+      setIds(new Set());
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
-
-    // NOTE: No orderBy -> avoids composite index requirement
-    const q = query(collection(db, "bookmarked_jobs"), where("userId", "==", userId));
-
+    const q = query(collection(db, "bookmarked_jobs"), where("userId", "==", uid));
     const unsub = onSnapshot(
       q,
       (snap) => {
@@ -44,24 +49,26 @@ export function useBookmarks(opts?: UseBookmarksOpts) {
     );
 
     return () => unsub();
-  }, [db, userId]);
+  }, [uid]);
 
   const isBookmarked = useCallback((jobId: string) => ids.has(jobId), [ids]);
 
+  /** نوشتن مستقیم روی فایراستورد (اگر کاربر لاگین نباشه no-op) */
   const toggleBookmark = useCallback(
     async (jobId: string, next: boolean) => {
-      const ref = doc(db, "bookmarked_jobs", `${userId}_${jobId}`);
+      if (!uid) return;
+      const ref = doc(db, "bookmarked_jobs", `${uid}_${jobId}`);
       if (next) {
-        await setDoc(ref, { userId, jobId, createdAt: serverTimestamp() });
+        await setDoc(ref, { userId: uid, jobId, createdAt: serverTimestamp() }, { merge: true });
       } else {
         await deleteDoc(ref);
       }
     },
-    [db, userId]
+    [uid]
   );
 
   return useMemo(
-    () => ({ bookmarkedIds: ids, isBookmarked, toggleBookmark, loading }),
-    [ids, isBookmarked, toggleBookmark, loading]
+    () => ({ bookmarkedIds: ids, isBookmarked, toggleBookmark, loading, uid }),
+    [ids, isBookmarked, toggleBookmark, loading, uid]
   );
 }

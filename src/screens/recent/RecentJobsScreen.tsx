@@ -1,6 +1,12 @@
-// src/screens/jobs/RecentJobsScreen.tsx
 import React, { useMemo, useEffect, useState } from "react";
-import { View, Text, ScrollView, Pressable, StyleSheet } from "react-native";
+import {
+  View,
+  Text,
+  ScrollView,
+  Pressable,
+  StyleSheet,
+  ActivityIndicator,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
@@ -8,7 +14,7 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
 import { useDesign } from "../../design/DesignProvider";
 import { rs } from "../../utils/responsive";
-import JobCard from "../../components/JobCard";
+import JobCard, { JobCardVM } from "../../components/JobCard";
 import type { HomeStackParamList } from "../../navigation/RootNavigator";
 
 import { Job } from "../../models/job/Job";
@@ -26,68 +32,69 @@ import {
   doc,
   getDoc,
 } from "firebase/firestore";
-import { app } from "../../lib/firebase"; 
+import { onAuthStateChanged } from "firebase/auth";
+import { app, auth } from "../../lib/firebase";
+import { useBookmarks } from "../../hooks/useBookmarks";
 
-type JobCardVM = {
-  id: string;
-  company: string;
-  companyLogoText: string;
-  title: string;
-  city: string;
-  country: string;
-  type: string;
-  summary: string;
-  applicants: number;
-  views: number;
-  postedAt: string;
-  bookmarked: boolean;
-};
-
-type Row = {
-  vm: JobCardVM;
-  job: Job;
-  company?: Company;
-};
+type Row = { vm: JobCardVM; job: Job; company?: Company };
 
 const RecentJobsScreen: React.FC = () => {
   const { theme: t } = useDesign();
   const nav = useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
-  const styles = useMemo(() => makeStyles(t), [t]);
+  const s = useMemo(() => makeStyles(t), [t]);
 
   const db = getFirestore(app);
+  const [uid, setUid] = useState<string | null>(auth.currentUser?.uid ?? null);
+  useEffect(() => onAuthStateChanged(auth, (u) => setUid(u?.uid ?? null)), []);
+
+  const { isBookmarked, toggleBookmark } = useBookmarks({
+    userId: uid ?? "__guest__",
+  });
+
   const [rows, setRows] = useState<Row[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const q = query(
+    setLoading(true);
+    const qy = query(
       collection(db, "jobs").withConverter(jobConverter),
       orderBy("publishedDate", "desc"),
       limit(20)
     );
 
-    const unsub = onSnapshot(q, async (snap) => {
-      const next: Row[] = [];
+    const unsub = onSnapshot(qy, async (snap) => {
+      const cache = new Map<string, Company>();
+      const list: Row[] = [];
 
       for (const d of snap.docs) {
         const j = d.data() as Job;
 
         let company: Company | undefined;
-        let companyName = "Unknown";
-        if (j.companyId != null) {
-          const cRef = doc(db, "companies", String(j.companyId)).withConverter(companyConverter);
-          const cSnap = await getDoc(cRef);
-          if (cSnap.exists()) {
-            company = cSnap.data() as Company;
-            companyName = company.name;
+        const cid = j.companyId != null ? String(j.companyId) : undefined;
+        if (cid) {
+          if (cache.has(cid)) company = cache.get(cid);
+          else {
+            const cRef = doc(db, "companies", cid).withConverter(
+              companyConverter
+            );
+            const cSnap = await getDoc(cRef);
+            if (cSnap.exists()) {
+              company = cSnap.data() as Company;
+              cache.set(cid, company);
+            }
           }
         }
 
-        const loc = j.location ?? "";
-        const [city = "", country = ""] = loc.split(",").map((s) => s.trim());
+        const companyName = company?.name ?? "Unknown";
+        const [city = "", country = ""] = (j.location ?? "")
+          .split(",")
+          .map((s) => s.trim());
 
         const vm: JobCardVM = {
           id: j.id,
           company: companyName,
           companyLogoText: companyName.charAt(0),
+          companyLogoUrl: company?.logoUrl ?? undefined,
           title: j.role,
           city,
           country,
@@ -96,42 +103,54 @@ const RecentJobsScreen: React.FC = () => {
           applicants: 0,
           views: 0,
           postedAt: j.publishedDate.toDateString(),
-          bookmarked: false,
+          bookmarked: isBookmarked(j.id),
         };
 
-        next.push({ vm, job: j, company });
+        list.push({ vm, job: j, company });
       }
 
-      setRows(next);
+      setRows(list);
+      setLoading(false);
     });
 
     return () => unsub();
-  }, [db]);
+  }, [db, isBookmarked]);
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={s.container}>
       {/* Header */}
-      <View style={styles.header}>
-        <Pressable onPress={() => nav.goBack()} hitSlop={10} style={styles.backBtn}>
+      <View style={s.header}>
+        <Pressable onPress={() => nav.goBack()} hitSlop={10} style={s.backBtn}>
           <Ionicons name="arrow-back" size={rs.ms(22)} color={t.textColor} />
         </Pressable>
-        <Text style={styles.title}>Recently Job Opening</Text>
-        <View style={styles.headerRightSpacer} />
+        <Text style={s.title}>Recently Job Opening</Text>
+        <View style={s.headerRightSpacer} />
       </View>
 
       {/* Body */}
       <ScrollView
-        contentContainerStyle={styles.listContainer}
+        contentContainerStyle={s.listContainer}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.count}>{rows.length} Jobs Found</Text>
+        {loading ? (
+          <View style={{ paddingVertical: rs.ms(24) }}>
+            <ActivityIndicator color={t.primaryColor} />
+          </View>
+        ) : (
+          <Text style={s.count}>{rows.length} Jobs Found</Text>
+        )}
 
-        {rows.map(({ vm, job, company }) => (
+        {rows.map(({ vm, job }) => (
           <JobCard
             key={vm.id}
-            job={vm} 
-            onPress={() => nav.navigate("JobDetail", { job, company })} 
-            onBookmark={() => {}}
+            job={{ ...vm, bookmarked: isBookmarked(vm.id) }}
+            onPress={() =>
+              nav.navigate("JobDetail", {
+                jobId: job.id,
+                companyId: job.companyId != null ? String(job.companyId) : null,
+              })
+            }
+            onBookmark={(id, next) => toggleBookmark(id, next)}
           />
         ))}
       </ScrollView>
@@ -152,12 +171,11 @@ const makeStyles = (t: Themed) =>
       paddingHorizontal: rs.ms(16),
       paddingTop: rs.ms(4),
       paddingBottom: rs.ms(10),
-      backgroundColor: t.backgroundColor,
     },
     backBtn: { padding: rs.ms(4) },
     title: { color: t.textColor, fontSize: t.h4, fontWeight: t.bold },
     headerRightSpacer: { width: rs.ms(26) },
-    listContainer: { paddingHorizontal: 0, paddingBottom: rs.ms(24) },
+    listContainer: { paddingBottom: rs.ms(24) },
     count: {
       marginBottom: rs.ms(12),
       marginLeft: rs.ms(16),

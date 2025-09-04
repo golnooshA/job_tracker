@@ -1,5 +1,10 @@
-// src/screens/jobs/JobDetailScreen.tsx
-import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import React, {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useCallback,
+} from "react";
 import {
   View,
   Text,
@@ -8,8 +13,12 @@ import {
   Pressable,
   LayoutChangeEvent,
   Image,
+  ActivityIndicator,
 } from "react-native";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
 
@@ -19,10 +28,11 @@ import { rs } from "../../utils/responsive";
 import { Job } from "../../models/job/Job";
 import { Company } from "../../models/company/Company";
 import { companyConverter } from "../../models/company/company.converter";
-import { getFirestore, doc, getDoc } from "firebase/firestore";
-import { app } from "../../lib/firebase";
+import { jobConverter } from "../../models/job/job.converter";
 
-// activity services (writes so Activity tabs get data)
+import { app } from "../../lib/firebase";
+import { getFirestore, doc, getDoc } from "firebase/firestore";
+
 import {
   applyToJob,
   bookmarkJob,
@@ -31,98 +41,104 @@ import {
   isApplied,
 } from "../../services/activity";
 
-type JobDetailParamList = {
-  JobDetail: {
-    job: Job;
-    company?: Company;
-  };
-};
+type JobDetailParams = { jobId: string; companyId?: string | null };
+type ParamList = { JobDetail: JobDetailParams };
 
 const JobDetailScreen: React.FC = () => {
   const { theme: t } = useDesign();
-  const styles = useMemo(() => makeStyles(t), [t]);
+  const s = useMemo(() => makeStyles(t), [t]);
   const nav = useNavigation<any>();
   const insets = useSafeAreaInsets();
-  const { params } = useRoute<RouteProp<JobDetailParamList, "JobDetail">>();
+  const db = getFirestore(app);
 
-  // ----- guards -----
-  const job = params?.job;
-  if (!job) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <Text style={{ color: t.textColor, padding: rs.ms(16) }}>Job not found.</Text>
-      </SafeAreaView>
-    );
-  }
+  const { params } = useRoute<RouteProp<ParamList, "JobDetail">>();
+  const { jobId, companyId } = params;
 
-  // prevent setState on unmounted
   const alive = useRef(true);
-  useEffect(() => {
-    return () => {
+  useEffect(
+    () => () => {
       alive.current = false;
-    };
-  }, []);
+    },
+    []
+  );
 
-  // ----- company (from route or fetch by id) -----
-  const [company, setCompany] = useState<Company | undefined>(params?.company);
-  useEffect(() => {
-    (async () => {
-      if (!company && job.companyId != null) {
-        try {
-          const db = getFirestore(app);
-          const ref = doc(db, "companies", String(job.companyId)).withConverter(companyConverter);
-          const snap = await getDoc(ref);
-          if (alive.current && snap.exists()) setCompany(snap.data() as Company);
-        } catch {
-          // ignore
-        }
-      }
-    })();
-  }, [company, job.companyId]);
-
-  // ----- derived -----
-  const { city, country } = useMemo(() => {
-    const [c1 = "", c2 = ""] = (job.location ?? "").split(",").map((s) => s.trim());
-    return { city: c1, country: c2 };
-  }, [job.location]);
-
+  const [job, setJob] = useState<Job | null>(null);
+  const [company, setCompany] = useState<Company | undefined>();
+  const [loading, setLoading] = useState<boolean>(true);
   const [tab, setTab] = useState<"job" | "company">("job");
   const [applied, setApplied] = useState(false);
   const [bookmarked, setBookmarked] = useState(false);
   const [tabBarW, setTabBarW] = useState(0);
-  const onTabBarLayout = (e: LayoutChangeEvent) => setTabBarW(e.nativeEvent.layout.width);
+  const onTabBarLayout = (e: LayoutChangeEvent) =>
+    setTabBarW(e.nativeEvent.layout.width);
 
-  // pre-check states so Activity tabs reflect current status
+  // fetch job
   useEffect(() => {
     (async () => {
       try {
-        const [bk, ap] = await Promise.all([isBookmarked(job.id), isApplied(job.id)]);
+        const snap = await getDoc(
+          doc(db, "jobs", jobId).withConverter(jobConverter)
+        );
+        if (!alive.current) return;
+        setJob(snap.exists() ? (snap.data() as Job) : null);
+      } finally {
+        if (alive.current) setLoading(false);
+      }
+    })();
+  }, [db, jobId]);
+
+  // fetch company
+  useEffect(() => {
+    const cid =
+      companyId ?? (job?.companyId != null ? String(job.companyId) : undefined);
+    if (!cid || company) return;
+    (async () => {
+      try {
+        const snap = await getDoc(
+          doc(db, "companies", cid).withConverter(companyConverter)
+        );
+        if (alive.current && snap.exists()) setCompany(snap.data() as Company);
+      } catch {}
+    })();
+  }, [db, companyId, job?.companyId, company]);
+
+  // applied/bookmarked flags
+  useEffect(() => {
+    if (!job?.id) return;
+    (async () => {
+      try {
+        const [bk, ap] = await Promise.all([
+          isBookmarked(job.id),
+          isApplied(job.id),
+        ]);
         if (!alive.current) return;
         setBookmarked(!!bk);
         setApplied(!!ap);
-      } catch {
-        // ignore
-      }
+      } catch {}
     })();
-  }, [job.id]);
+  }, [job?.id]);
 
-  // bottom safe offset
   const bottomOffset = rs.ms(50) + insets.bottom + rs.ms(12);
 
-  const applyUrl = job.jobLink || "";
+  const { city, country } = useMemo(() => {
+    const loc = job?.location ?? "";
+    const [c1 = "", c2 = ""] = loc.split(",").map((s) => s.trim());
+    return { city: c1, country: c2 };
+  }, [job?.location]);
+
+  const applyUrl = job?.jobLink || "";
+
   const openApply = useCallback(async () => {
+    if (!job?.id) return;
     try {
-      await applyToJob(job.id); // write to Firestore so Activity > Applied shows it
+      await applyToJob(job.id);
       if (alive.current) setApplied(true);
-    } catch {
-      // optionally show a toast/snackbar
-    }
-    if (applyUrl) {
-      nav.navigate("WebView", { title: job.role, url: applyUrl });
-    }
-  }, [applyUrl, job.id, job.role, nav]);
+    } catch {}
+    if (applyUrl) nav.navigate("WebView", { title: job.role, url: applyUrl });
+  }, [applyUrl, job?.id, job?.role, nav]);
 
   const toggleBookmark = useCallback(async () => {
+    if (!job?.id) return;
     try {
       if (bookmarked) {
         await unbookmarkJob(job.id);
@@ -131,25 +147,41 @@ const JobDetailScreen: React.FC = () => {
         await bookmarkJob(job.id);
         if (alive.current) setBookmarked(true);
       }
-    } catch {
-      // optionally show a toast/snackbar
-    }
-  }, [bookmarked, job.id]);
+    } catch {}
+  }, [bookmarked, job?.id]);
+
+  if (loading) {
+    return (
+      <SafeAreaView style={s.container}>
+        <ActivityIndicator
+          style={{ marginTop: rs.ms(24) }}
+          color={t.primaryColor}
+        />
+      </SafeAreaView>
+    );
+  }
+  if (!job) {
+    return (
+      <SafeAreaView style={s.container}>
+        <View style={{ padding: rs.ms(16) }}>
+          <Text style={{ color: t.textColor }}>Job not found.</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={s.container}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={s.header}>
         <Pressable
           onPress={() => (nav.canGoBack() ? nav.goBack() : null)}
           hitSlop={10}
-          style={styles.backBtn}
-          accessibilityRole="button"
-          accessibilityLabel="Go back"
+          style={s.backBtn}
         >
           <Ionicons name="arrow-back" size={rs.ms(22)} color={t.textColor} />
         </Pressable>
-        <Text style={[styles.headerTitle, { opacity: 0 }]}>hidden</Text>
+        <Text style={[s.headerTitle, { opacity: 0 }]}>hidden</Text>
         <View style={{ width: rs.ms(26) }} />
       </View>
 
@@ -158,29 +190,39 @@ const JobDetailScreen: React.FC = () => {
         contentContainerStyle={{ paddingBottom: bottomOffset + rs.ms(64) }}
       >
         {/* Hero */}
-        <View style={styles.hero}>
+        <View style={s.hero}>
           {company?.logoUrl ? (
-            <Image source={{ uri: company.logoUrl }} style={styles.logoImg} resizeMode="cover" />
+            <Image
+              source={{ uri: company.logoUrl }}
+              style={s.logoImg}
+              resizeMode="cover"
+            />
           ) : (
-            <View style={styles.logoCircle}>
-              <Text style={styles.logoInitial}>{(company?.name?.[0] ?? "J").toUpperCase()}</Text>
+            <View style={s.logoCircle}>
+              <Text style={s.logoInitial}>
+                {(company?.name?.[0] ?? "J").toUpperCase()}
+              </Text>
             </View>
           )}
 
-          <Text style={styles.jobTitle}>{job.role}</Text>
+          <Text style={s.jobTitle}>{job.role}</Text>
 
-          <View style={styles.metaRow}>
-            <Text style={styles.companyText}>{company?.name ?? "Unknown"}</Text>
-            <Text style={styles.dot}> • </Text>
-            <Text style={[styles.typeText, { color: t.appColor || t.primaryColor }]}>
+          <View style={s.metaRow}>
+            <Text style={s.companyText}>{company?.name ?? "Unknown"}</Text>
+            <Text style={s.dot}> • </Text>
+            <Text style={[s.typeText, { color: t.appColor || t.primaryColor }]}>
               {job.jobType}
             </Text>
           </View>
 
-          <View style={[styles.statsRow, { marginTop: rs.ms(10) }]}>
-            <View style={styles.statItem}>
-              <Ionicons name="location" size={rs.ms(18)} color={t.appColor || t.primaryColor} />
-              <Text style={styles.statText}>
+          <View style={[s.statsRow, { marginTop: rs.ms(10) }]}>
+            <View style={s.statItem}>
+              <Ionicons
+                name="location"
+                size={rs.ms(18)}
+                color={t.appColor || t.primaryColor}
+              />
+              <Text style={s.statText}>
                 {country ? `${city}, ${country}` : job.location ?? "-"}
               </Text>
             </View>
@@ -188,18 +230,27 @@ const JobDetailScreen: React.FC = () => {
         </View>
 
         {/* Tabs */}
-        <View style={styles.tabsRow} onLayout={onTabBarLayout}>
-          <Pressable style={styles.tabBtn} onPress={() => setTab("job")}>
-            <Text style={[styles.tabText, tab === "job" && styles.tabTextActive]}>Job Details</Text>
+        <View
+          style={s.tabsRow}
+          onLayout={(e: LayoutChangeEvent) =>
+            setTabBarW(e.nativeEvent.layout.width)
+          }
+        >
+          <Pressable style={s.tabBtn} onPress={() => setTab("job")}>
+            <Text style={[s.tabText, tab === "job" && s.tabTextActive]}>
+              Job Details
+            </Text>
           </Pressable>
-          <Pressable style={styles.tabBtn} onPress={() => setTab("company")}>
-            <Text style={[styles.tabText, tab === "company" && styles.tabTextActive]}>Company</Text>
+          <Pressable style={s.tabBtn} onPress={() => setTab("company")}>
+            <Text style={[s.tabText, tab === "company" && s.tabTextActive]}>
+              Company
+            </Text>
           </Pressable>
         </View>
-        <View style={styles.tabIndicatorWrap}>
+        <View style={s.tabIndicatorWrap}>
           <View
             style={[
-              styles.tabIndicator,
+              s.tabIndicator,
               { transform: [{ translateX: tab === "job" ? 0 : tabBarW / 2 }] },
             ]}
           />
@@ -207,47 +258,55 @@ const JobDetailScreen: React.FC = () => {
 
         {/* Content */}
         {tab === "job" ? (
-          <View style={styles.sectionWrap}>
-            <Text style={styles.sectionTitle}>Description</Text>
-            <Text style={styles.paragraph}>{job.description || "-"}</Text>
+          <View style={s.sectionWrap}>
+            <Text style={s.sectionTitle}>Description</Text>
+            <Text style={s.paragraph}>{job.description || "-"}</Text>
 
-            <Text style={[styles.sectionTitle, { marginTop: rs.ms(18) }]}>Skills Needed</Text>
+            <Text style={[s.sectionTitle, { marginTop: rs.ms(18) }]}>
+              Skills Needed
+            </Text>
             <View style={{ marginTop: rs.ms(10) }}>
               {Array.isArray(job.skills) && job.skills.length > 0 ? (
-                job.skills.map((s) => (
+                job.skills.map((sk) => (
                   <View
-                    key={s}
-                    style={{ flexDirection: "row", alignItems: "center", marginTop: rs.ms(10) }}
+                    key={sk}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      marginTop: rs.ms(10),
+                    }}
                   >
-                    <View style={styles.bullet} />
-                    <Text style={styles.bulletText}>{s}</Text>
+                    <View style={s.bullet} />
+                    <Text style={s.bulletText}>{sk}</Text>
                   </View>
                 ))
               ) : (
-                <Text style={styles.bulletText}>No skills provided.</Text>
+                <Text style={s.bulletText}>No skills provided.</Text>
               )}
             </View>
           </View>
         ) : (
-          <View style={styles.sectionWrap}>
-            <Text style={styles.sectionTitle}>About</Text>
-            <Text style={styles.paragraph}>
+          <View style={s.sectionWrap}>
+            <Text style={s.sectionTitle}>About</Text>
+            <Text style={s.paragraph}>
               {company?.about ?? "No company description provided."}
             </Text>
 
-            <Text style={[styles.sectionTitle, { marginTop: rs.ms(18) }]}>
+            <Text style={[s.sectionTitle, { marginTop: rs.ms(18) }]}>
               More Information
             </Text>
             <View style={{ marginTop: rs.ms(8) }}>
-              <Text style={styles.bulletText}>
+              <Text style={s.bulletText}>
                 Industry:{" "}
                 <Text style={{ color: t.subtextColor }}>
                   {company?.specialization ?? "-"}
                 </Text>
               </Text>
-              <Text style={[styles.bulletText, { marginTop: rs.ms(8) }]}>
+              <Text style={[s.bulletText, { marginTop: rs.ms(8) }]}>
                 Location:{" "}
-                <Text style={{ color: t.subtextColor }}>{company?.location ?? "-"}</Text>
+                <Text style={{ color: t.subtextColor }}>
+                  {company?.location ?? "-"}
+                </Text>
               </Text>
             </View>
           </View>
@@ -255,24 +314,30 @@ const JobDetailScreen: React.FC = () => {
       </ScrollView>
 
       {/* Bottom actions */}
-      <View style={[styles.bottomBar, { bottom: bottomOffset }]}>
+      <View style={[s.bottomBar, { bottom: bottomOffset }]}>
         <Pressable
           onPress={openApply}
           disabled={!applyUrl || applied}
-          style={[styles.applyBtn, (!applyUrl || applied) && { backgroundColor: t.dividerColor }]}
+          style={[
+            s.applyBtn,
+            (!applyUrl || applied) && { backgroundColor: t.dividerColor },
+          ]}
           accessibilityRole="button"
-          accessibilityLabel="Apply to this job"
         >
-          <Text style={[styles.applyText, (!applyUrl || applied) && { color: t.subtextColor }]}>
+          <Text
+            style={[
+              s.applyText,
+              (!applyUrl || applied) && { color: t.subtextColor },
+            ]}
+          >
             {applied ? "Applied" : "Apply Now"}
           </Text>
         </Pressable>
 
         <Pressable
-          style={styles.bookmarkBtn}
+          style={s.bookmarkBtn}
           onPress={toggleBookmark}
           accessibilityRole="button"
-          accessibilityLabel={bookmarked ? "Remove bookmark" : "Save job"}
         >
           <Ionicons
             name={bookmarked ? "bookmark" : "bookmark-outline"}
@@ -308,7 +373,11 @@ const makeStyles = (t: Themed) =>
       maxWidth: "70%",
     },
 
-    hero: { alignItems: "center", paddingTop: rs.ms(6), paddingBottom: rs.ms(8) },
+    hero: {
+      alignItems: "center",
+      paddingTop: rs.ms(6),
+      paddingBottom: rs.ms(8),
+    },
     logoImg: {
       width: rs.ms(96),
       height: rs.ms(96),
@@ -325,9 +394,22 @@ const makeStyles = (t: Themed) =>
       justifyContent: "center",
       marginBottom: rs.ms(8),
     },
-    logoInitial: { color: t.textColor, fontWeight: t.bold, fontSize: rs.ms(28) },
-    jobTitle: { color: t.textColor, fontSize: rs.ms(28), fontWeight: t.bold, textAlign: "center" },
-    metaRow: { flexDirection: "row", alignItems: "center", marginTop: rs.ms(6) },
+    logoInitial: {
+      color: t.textColor,
+      fontWeight: t.bold,
+      fontSize: rs.ms(28),
+    },
+    jobTitle: {
+      color: t.textColor,
+      fontSize: rs.ms(28),
+      fontWeight: t.bold,
+      textAlign: "center",
+    },
+    metaRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginTop: rs.ms(6),
+    },
     companyText: { color: t.subtextColor, fontSize: t.h5 },
     dot: { color: t.subtextColor, fontSize: t.h5 },
     typeText: { fontSize: t.h5, fontWeight: t.semiBold },
@@ -358,11 +440,20 @@ const makeStyles = (t: Themed) =>
       marginHorizontal: rs.ms(16),
       overflow: "hidden",
     },
-    tabIndicator: { width: "50%", height: rs.ms(2), backgroundColor: t.appColor || t.primaryColor },
+    tabIndicator: {
+      width: "50%",
+      height: rs.ms(2),
+      backgroundColor: t.appColor || t.primaryColor,
+    },
 
     sectionWrap: { paddingHorizontal: rs.ms(16), marginTop: rs.ms(14) },
     sectionTitle: { color: t.textColor, fontSize: t.h4, fontWeight: t.bold },
-    paragraph: { color: t.subtextColor, fontSize: t.h6, lineHeight: rs.ms(22), marginTop: rs.ms(8) },
+    paragraph: {
+      color: t.subtextColor,
+      fontSize: t.h6,
+      lineHeight: rs.ms(22),
+      marginTop: rs.ms(8),
+    },
     bullet: {
       width: rs.ms(6),
       height: rs.ms(6),

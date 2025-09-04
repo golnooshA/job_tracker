@@ -1,8 +1,20 @@
+// src/lib/firebase.ts
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { Platform } from "react-native";
 import { getFirestore } from "firebase/firestore";
 
-import { isSupported, getAnalytics } from "firebase/analytics";
+import {
+  getAuth,
+  initializeAuth,
+  getReactNativePersistence,
+  browserLocalPersistence,
+  setPersistence,
+  type Auth,
+} from "firebase/auth";
+
+import AsyncStorage from "@react-native-async-storage/async-storage";
+// Use a type-only import to avoid bundling analytics on native
+import type { Analytics } from "firebase/analytics";
 
 const firebaseConfig = {
   apiKey: "AIzaSyAOvJSZQ0rtCHYlTmGESK4yZJTKYgsC-d4",
@@ -11,17 +23,43 @@ const firebaseConfig = {
   storageBucket: "job-tracker-58689.firebasestorage.app",
   messagingSenderId: "197165158987",
   appId: "1:197165158987:web:83e01b946271c2736cb3ce",
-  measurementId: "G-G76ZWBHFQK"
+  measurementId: "G-G76ZWBHFQK",
 };
 
+// --- App (single instance) ---
 export const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+
+// --- Firestore ---
 export const db = getFirestore(app);
 
-export let analytics: any = null;
+// --- Auth with proper persistence ---
+// On native (iOS/Android): use AsyncStorage persistence via initializeAuth
+// On web: use default getAuth + local persistence
+let _auth: Auth;
+
 if (Platform.OS === "web") {
-  isSupported().then((yes) => {
-    if (yes) {
-      analytics = getAnalytics(app);
-    }
+  _auth = getAuth(app);
+  // Ensure persistence is local (so sessions survive reloads)
+  setPersistence(_auth, browserLocalPersistence).catch(() => {});
+} else {
+  _auth = initializeAuth(app, {
+    persistence: getReactNativePersistence(AsyncStorage),
   });
 }
+
+export const auth = _auth;
+
+// --- Analytics (web-only, dynamic import) ---
+export let analytics: Analytics | null = null;
+if (Platform.OS === "web") {
+  // Dynamically import so native bundles don’t include analytics
+  (async () => {
+    const mod = await import("firebase/analytics");
+    if (await mod.isSupported()) {
+      analytics = mod.getAnalytics(app);
+    }
+  })().catch(() => {
+    // ignore analytics failures
+  });
+}
+

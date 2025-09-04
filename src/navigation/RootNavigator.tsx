@@ -1,3 +1,4 @@
+// navigation/RootNavigator.tsx
 import React from "react";
 import { Pressable } from "react-native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
@@ -7,46 +8,57 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useDesign } from "../design/DesignProvider";
 import { rs } from "../utils/responsive";
 
+/* ---------- Screens ---------- */
 import HomeScreen from "../screens/home/HomeScreen";
+import NotificationsScreen from "../screens/home/NotificationsScreen";
 import CategoriesScreen from "../screens/category/CategoriesScreen";
 import CategoryJobsScreen from "../screens/category/CategoryJobsScreen";
 import RecentJobsScreen from "../screens/recent/RecentJobsScreen";
+
 import SearchScreen from "../screens/search/SearchScreen";
+
 import CompaniesScreen from "../screens/companies/CompaniesScreen";
 import CompanyDetailScreen from "../screens/companies/CompanyDetailScreen";
+
 import JobDetailScreen from "../screens/job/JobDetailScreen";
 import WebViewScreen from "../screens/common/WebViewScreen";
-import AboutScreen from "../screens/profile/AboutScreen";
+
+import ActivityScreen from "../screens/activity/ActivityScreen";
+
 import ProfileScreen from "../screens/profile/ProfileScreen";
 import ThemeScreen from "../screens/profile/ThemeScreen";
-import ActivityScreen from "../screens/activity/ActivityScreen";
+import NotificationScreen from "../screens/profile/NotificationScreen";
+import AboutScreen from "../screens/profile/AboutScreen";
 
 /* ---------- Types ---------- */
 export type HomeStackParamList = {
   Home: undefined;
+  Notifications: undefined;
   Categories: undefined;
   CategoryJobs: { key: string; label: string } | undefined;
   RecentJobs: undefined;
-  JobDetail: any;
+  JobDetail: { jobId: string; companyId?: string | null };
   WebView: { title?: string; url: string };
+  CategoriesStack?: undefined;
 };
 
 export type CompaniesStackParamList = {
   CompaniesList: undefined;
   CompanyDetail: { key: string } | undefined;
-  JobDetail: any;
+  JobDetail: { jobId: string; companyId?: string | null };
   WebView: { title?: string; url: string };
 };
 
 export type ActivityStackParamList = {
   ActivityHome: undefined;
-  JobDetail: any;
+  JobDetail: { jobId: string; companyId?: string | null };
   WebView: { title?: string; url: string };
 };
 
 export type ProfileStackParamList = {
   ProfileHome: undefined;
   Theme: undefined;
+  Notification: undefined;
   About: undefined;
 };
 
@@ -58,16 +70,22 @@ export type RootTabParamList = {
   Profile: undefined;
 };
 
+/* ---------- Navigators ---------- */
 const Tab = createBottomTabNavigator<RootTabParamList>();
 const HomeStack = createNativeStackNavigator<HomeStackParamList>();
 const CompStack = createNativeStackNavigator<CompaniesStackParamList>();
-const ActivityStack = createNativeStackNavigator<ActivityStackParamList>();
-const ProfileStack = createNativeStackNavigator<ProfileStackParamList>();
+const ActStack = createNativeStackNavigator<ActivityStackParamList>();
+const ProfStack = createNativeStackNavigator<ProfileStackParamList>();
 
 /* -------- Home Stack -------- */
 const HomeStackNavigator: React.FC = () => (
   <HomeStack.Navigator screenOptions={{ headerShown: false }}>
     <HomeStack.Screen name="Home" component={HomeScreen} />
+    <HomeStack.Screen
+      name="Notifications"
+      component={NotificationsScreen}
+      options={{ headerShown: false }}
+    />
     <HomeStack.Screen name="Categories" component={CategoriesScreen} />
     <HomeStack.Screen name="CategoryJobs" component={CategoryJobsScreen} />
     <HomeStack.Screen name="RecentJobs" component={RecentJobsScreen} />
@@ -88,11 +106,11 @@ const CompaniesStackNavigator: React.FC = () => (
 
 /* -------- Activity Stack -------- */
 const ActivityStackNavigator: React.FC = () => (
-  <ActivityStack.Navigator screenOptions={{ headerShown: false }}>
-    <ActivityStack.Screen name="ActivityHome" component={ActivityScreen} />
-    <ActivityStack.Screen name="JobDetail" component={JobDetailScreen} />
-    <ActivityStack.Screen name="WebView" component={WebViewScreen} />
-  </ActivityStack.Navigator>
+  <ActStack.Navigator screenOptions={{ headerShown: false }}>
+    <ActStack.Screen name="ActivityHome" component={ActivityScreen} />
+    <ActStack.Screen name="JobDetail" component={JobDetailScreen} />
+    <ActStack.Screen name="WebView" component={WebViewScreen} />
+  </ActStack.Navigator>
 );
 
 /* -------- Profile Stack -------- */
@@ -107,48 +125,52 @@ const ProfileStackNavigator: React.FC = () => {
     headerBackTitleVisible: false,
   };
 
+  const BackBtn = ({ onPress }: { onPress: () => void }) => (
+    <Pressable
+      onPress={onPress}
+      hitSlop={10}
+      style={{ paddingHorizontal: rs.ms(8) }}
+    >
+      <Ionicons name="arrow-back" size={rs.ms(22)} color={t.textColor} />
+    </Pressable>
+  );
+
   return (
-    <ProfileStack.Navigator>
-      <ProfileStack.Screen
+    <ProfStack.Navigator>
+      <ProfStack.Screen
         name="ProfileHome"
         component={ProfileScreen}
         options={{ headerShown: false }}
       />
-      <ProfileStack.Screen
+      <ProfStack.Screen
         name="Theme"
         component={ThemeScreen}
         options={({ navigation }) => ({
           ...headerCommon,
           headerTitle: "Theme",
-          headerLeft: () => (
-            <Pressable
-              onPress={navigation.goBack}
-              hitSlop={10}
-              style={{ paddingHorizontal: rs.ms(8) }}
-            >
-              <Ionicons name="arrow-back" size={rs.ms(22)} color={t.textColor} />
-            </Pressable>
-          ),
+          headerLeft: () => <BackBtn onPress={navigation.goBack} />,
         })}
       />
-      <ProfileStack.Screen
+      {/* ✅ این صفحه مربوط به تنظیمات است و نامش 'Notification' می‌ماند */}
+      <ProfStack.Screen
+        name="Notification"
+        component={NotificationScreen}
+        options={({ navigation }) => ({
+          ...headerCommon,
+          headerTitle: "Notification",
+          headerLeft: () => <BackBtn onPress={navigation.goBack} />,
+        })}
+      />
+      <ProfStack.Screen
         name="About"
         component={AboutScreen}
         options={({ navigation }) => ({
           ...headerCommon,
           headerTitle: "About",
-          headerLeft: () => (
-            <Pressable
-              onPress={navigation.goBack}
-              hitSlop={10}
-              style={{ paddingHorizontal: rs.ms(8) }}
-            >
-              <Ionicons name="arrow-back" size={rs.ms(22)} color={t.textColor} />
-            </Pressable>
-          ),
+          headerLeft: () => <BackBtn onPress={navigation.goBack} />,
         })}
       />
-    </ProfileStack.Navigator>
+    </ProfStack.Navigator>
   );
 };
 
@@ -203,7 +225,11 @@ export default function RootNavigator() {
           getTabIcon(route.name as keyof RootTabParamList, size, color),
       })}
     >
-      <Tab.Screen name="HomeStack" component={HomeStackNavigator} options={{ title: "Home" }} />
+      <Tab.Screen
+        name="HomeStack"
+        component={HomeStackNavigator}
+        options={{ title: "Home" }}
+      />
       <Tab.Screen name="Search" component={SearchScreen} />
       <Tab.Screen name="Companies" component={CompaniesStackNavigator} />
       <Tab.Screen name="Activity" component={ActivityStackNavigator} />

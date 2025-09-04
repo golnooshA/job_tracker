@@ -1,12 +1,14 @@
 import React, { useMemo } from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text, StyleSheet, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import { signOut } from "firebase/auth";
 
 import { useDesign } from "../../design/DesignProvider";
 import { rs } from "../../utils/responsive";
 import SettingRow from "../../components/SettingRow";
+import { auth } from "../../lib/firebase";
 
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import type { ProfileStackParamList } from "../../navigation/RootNavigator";
@@ -18,11 +20,34 @@ const ProfileScreen: React.FC = () => {
   const s = useMemo(() => makeStyles(t), [t]);
   const nav = useNavigation<Nav>();
 
+  const user = auth.currentUser;
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch (e) {
+      console.log("Logout error", e);
+    }
+  };
+
   return (
     <SafeAreaView style={s.container}>
       {/* Header */}
       <View style={s.header}>
         <Text style={s.title}>Profile</Text>
+      </View>
+
+      {/* User info */}
+      <View style={s.userBox}>
+        <View style={s.avatar}>
+          {user?.photoURL ? (
+            <Image source={{ uri: user.photoURL }} style={s.avatarImg} />
+          ) : (
+            <Ionicons name="person" size={rs.ms(40)} color="#fff" />
+          )}
+        </View>
+        <Text style={s.name}>{user?.displayName || "Guest User"}</Text>
+        <Text style={s.email}>{user?.email || ""}</Text>
       </View>
 
       {/* Items */}
@@ -53,7 +78,7 @@ const ProfileScreen: React.FC = () => {
               style={{ marginRight: rs.ms(12) }}
             />
           }
-          onPress={() => {}}
+          onPress={() => nav.navigate("Notification")}
         />
         <View style={s.divider} />
 
@@ -89,7 +114,7 @@ const ProfileScreen: React.FC = () => {
               style={{ marginRight: rs.ms(12) }}
             />
           }
-          onPress={() => {}}
+          onPress={handleLogout}
           showChevron={false}
         />
       </View>
@@ -99,7 +124,7 @@ const ProfileScreen: React.FC = () => {
 
 export default ProfileScreen;
 
-/* ---------------- styles at bottom ---------------- */
+/* ---------------- styles ---------------- */
 const makeStyles = (t: ReturnType<typeof useDesign>["theme"]) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: t.backgroundColor },
@@ -109,6 +134,28 @@ const makeStyles = (t: ReturnType<typeof useDesign>["theme"]) =>
       paddingBottom: rs.ms(8),
     },
     title: { color: t.textColor, fontSize: t.h4, fontWeight: t.bold },
+
+    userBox: {
+      alignItems: "center",
+      marginTop: rs.ms(12),
+      marginBottom: rs.ms(8),
+    },
+    avatar: {
+      width: rs.ms(80),
+      height: rs.ms(80),
+      borderRadius: rs.ms(40),
+      marginBottom: rs.ms(8),
+      backgroundColor: t.appColor || t.primaryColor, // orange or theme color
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    avatarImg: {
+      width: "100%",
+      height: "100%",
+      borderRadius: rs.ms(40),
+    },
+    name: { fontSize: t.h4, color: t.textColor, fontWeight: t.bold },
+    email: { fontSize: t.h6, color: t.subtextColor, marginTop: rs.ms(2) },
 
     card: {
       marginHorizontal: rs.ms(16),
@@ -122,7 +169,7 @@ const makeStyles = (t: ReturnType<typeof useDesign>["theme"]) =>
     divider: {
       height: StyleSheet.hairlineWidth,
       backgroundColor: t.dividerColor,
-      marginLeft: rs.ms(16) + rs.ms(18) + rs.ms(12), // indent after icon
+      marginLeft: rs.ms(16) + rs.ms(18) + rs.ms(12),
     },
     sectionSeparator: {
       marginTop: rs.ms(18),

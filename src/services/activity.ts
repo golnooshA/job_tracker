@@ -1,54 +1,62 @@
+// src/services/activity.ts
+import { auth, db } from "../lib/firebase";
 import {
-  getFirestore, doc, setDoc, deleteDoc, getDoc,
-  collection, onSnapshot, query, where, orderBy
+  doc,
+  setDoc,
+  deleteDoc,
+  getDoc,
+  serverTimestamp,
 } from "firebase/firestore";
-import { app } from "../lib/firebase";
 
-const db = getFirestore(app);
-
-export function getUserId(): string {
-
-  return "1"; // TEMP: must match what ActivityScreen queries
+/** اگر کاربر لاگین نباشه خطا می‌ده (جلوی نوشتن/خواندن اشتباهی رو می‌گیره) */
+function uidOrThrow(): string {
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error("Not signed in");
+  return uid;
 }
 
 const key = (userId: string, jobId: string) => `${userId}_${jobId}`;
 
+/* ---------------- Applied ---------------- */
 export async function applyToJob(jobId: string) {
-  const userId = getUserId();
-  await setDoc(doc(db, "applied_jobs", key(userId, jobId)), {
-    userId,
-    jobId,
-    createdAt: new Date(), // ok; you can switch to serverTimestamp()
-  }, { merge: true });
+  const uid = uidOrThrow();
+  const ref = doc(db, "applied_jobs", key(uid, jobId));
+  await setDoc(
+    ref,
+    { userId: uid, jobId, createdAt: serverTimestamp() },
+    { merge: true }
+  );
 }
 
 export async function unapplyJob(jobId: string) {
-  const userId = getUserId();
-  await deleteDoc(doc(db, "applied_jobs", key(userId, jobId)));
+  const uid = uidOrThrow();
+  await deleteDoc(doc(db, "applied_jobs", key(uid, jobId)));
 }
 
-export async function bookmarkJob(jobId: string) {
-  const userId = getUserId();
-  await setDoc(doc(db, "bookmarked_jobs", key(userId, jobId)), {
-    userId,
-    jobId,
-    createdAt: new Date(),
-  }, { merge: true });
-}
-
-export async function unbookmarkJob(jobId: string) {
-  const userId = getUserId();
-  await deleteDoc(doc(db, "bookmarked_jobs", key(userId, jobId)));
-}
-
-export async function isBookmarked(jobId: string) {
-  const userId = getUserId();
-  const snap = await getDoc(doc(db, "bookmarked_jobs", key(userId, jobId)));
+export async function isApplied(jobId: string): Promise<boolean> {
+  const uid = uidOrThrow();
+  const snap = await getDoc(doc(db, "applied_jobs", key(uid, jobId)));
   return snap.exists();
 }
 
-export async function isApplied(jobId: string) {
-  const userId = getUserId();
-  const snap = await getDoc(doc(db, "applied_jobs", key(userId, jobId)));
+/* ---------------- Bookmarks ---------------- */
+export async function bookmarkJob(jobId: string) {
+  const uid = uidOrThrow();
+  const ref = doc(db, "bookmarked_jobs", key(uid, jobId));
+  await setDoc(
+    ref,
+    { userId: uid, jobId, createdAt: serverTimestamp() },
+    { merge: true }
+  );
+}
+
+export async function unbookmarkJob(jobId: string) {
+  const uid = uidOrThrow();
+  await deleteDoc(doc(db, "bookmarked_jobs", key(uid, jobId)));
+}
+
+export async function isBookmarked(jobId: string): Promise<boolean> {
+  const uid = uidOrThrow();
+  const snap = await getDoc(doc(db, "bookmarked_jobs", key(uid, jobId)));
   return snap.exists();
 }

@@ -1,4 +1,3 @@
-// src/screens/companies/CompaniesScreen.tsx
 import React, { useMemo, useState, useEffect } from "react";
 import {
   View,
@@ -28,7 +27,7 @@ type Nav = NativeStackNavigationProp<CompaniesStackParamList, "CompaniesList">;
 
 const CompaniesScreen: React.FC = () => {
   const { theme: t } = useDesign();
-  const styles = useMemo(() => makeStyles(t), [t]);
+  const s = useMemo(() => makeStyles(t), [t]);
   const nav = useNavigation<Nav>();
   const { width: SCREEN_W } = useWindowDimensions();
 
@@ -36,14 +35,10 @@ const CompaniesScreen: React.FC = () => {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [q, setQ] = useState("");
 
-  // 🔹 subscribe to companies
   useEffect(() => {
     const unsub = onSnapshot(
       collection(db, "companies").withConverter(companyConverter),
-      (snap) => {
-        const data = snap.docs.map((d) => d.data() as Company);
-        setCompanies(data);
-      }
+      (snap) => setCompanies(snap.docs.map((d) => d.data() as Company))
     );
     return () => unsub();
   }, [db]);
@@ -55,7 +50,6 @@ const CompaniesScreen: React.FC = () => {
       : companies;
   }, [q, companies]);
 
-  // layout: 3 columns
   const COLUMNS = 3;
   const PADDING_H = rs.ms(16);
   const GAP = rs.ms(10);
@@ -64,26 +58,20 @@ const CompaniesScreen: React.FC = () => {
   );
 
   const onPressCompany = (c: Company) => {
-    nav.navigate("CompanyDetail", {
-      key: c.id,
-      name: c.name,
-      industry: c.specialization,
-      location: c.location,
-      logoUri: c.logoUrl,
-    });
+    nav.navigate("CompanyDetail", { key: c.id });
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={s.container}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={s.header}>
         <Pressable
-          style={styles.backBtn}
+          style={s.backBtn}
           onPress={() => nav.canGoBack() && nav.goBack()}
         >
           <Ionicons name="arrow-back" size={rs.ms(22)} color={t.textColor} />
         </Pressable>
-        <Text style={styles.title}>Companies</Text>
+        <Text style={s.title}>Companies</Text>
         <View style={{ width: rs.ms(26) }} />
       </View>
 
@@ -105,7 +93,7 @@ const CompaniesScreen: React.FC = () => {
         renderItem={({ item }) => (
           <CompanyTile
             name={item.name}
-            logoUri={item.logoUrl} 
+            logoUri={item.logoUrl}
             initial={item.name[0]}
             onPress={() => onPressCompany(item)}
             containerStyle={{ width: ITEM_W }}
