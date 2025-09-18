@@ -97,12 +97,7 @@ A mobile application built with **React Native** (Expo) and **Firebase** that al
     <td><img src="assets/screenshots/dark/25.PNG" width="250" /></td>
     <td><img src="assets/screenshots/dark/26.PNG" width="250" /></td>
   </tr>
-    
-  <tr>
-    <td><img src="assets/screenshots/light/16.PNG" width="250" /></td>
-    <td><img src="assets/screenshots/light/17.PNG" width="250" /></td>
-    <td><img src="assets/screenshots/light/18.PNG" width="250" /></td>
-  </tr>
+
 </table>
 
 ## How Notifications Work
