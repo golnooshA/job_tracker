@@ -47,6 +47,63 @@ A mobile application built with **React Native** (Expo) and **Firebase** that al
 /design        -> Theme + DesignProvider
 
 ````
+## Preview
+
+<table>
+  <tr>
+    <td><img src="assets/screenshots/light/1.PNG" width="250" /></td>
+    <td><img src="assets/screenshots/light/2.PNG" width="250" /></td>
+    <td><img src="assets/screenshots/light/3.PNG" width="250" /></td>
+  </tr>
+  
+  <tr>
+    <td><img src="assets/screenshots/light/4.PNG" width="250" /></td>
+    <td><img src="assets/screenshots/light/5.PNG" width="250" /></td>
+    <td><img src="assets/screenshots/light/6.PNG" width="250" /></td>
+  </tr>
+  
+  <tr>
+    <td><img src="assets/screenshots/light/7.PNG" width="250" /></td>
+    <td><img src="assets/screenshots/light/8.PNG" width="250" /></td>
+    <td><img src="assets/screenshots/light/9.PNG" width="250" /></td>
+  </tr>
+ 
+  <tr>
+    <td><img src="assets/screenshots/light/10.PNG" width="250" /></td>
+    <td><img src="assets/screenshots/light/11.PNG" width="250" /></td>
+    <td><img src="assets/screenshots/light/12.PNG" width="250" /></td>
+  </tr>
+  
+  <tr>
+    <td><img src="assets/screenshots/light/13.PNG" width="250" /></td>
+    <td><img src="assets/screenshots/light/14.PNG" width="250" /></td>
+    <td><img src="assets/screenshots/light/15.PNG" width="250" /></td>
+  </tr>
+  
+  <tr>
+    <td><img src="assets/screenshots/light/16.PNG" width="250" /></td>
+    <td><img src="assets/screenshots/light/17.PNG" width="250" /></td>
+    <td><img src="assets/screenshots/light/18.PNG" width="250" /></td>
+  </tr>
+    
+  <tr>
+    <td><img src="assets/screenshots/dark/20.PNG" width="250" /></td>
+    <td><img src="assets/screenshots/dark/21.PNG" width="250" /></td>
+    <td><img src="assets/screenshots/dark/22.PNG" width="250" /></td>
+  </tr>
+
+  <tr>
+    <td><img src="assets/screenshots/dark/24.PNG" width="250" /></td>
+    <td><img src="assets/screenshots/dark/25.PNG" width="250" /></td>
+    <td><img src="assets/screenshots/dark/26.PNG" width="250" /></td>
+  </tr>
+    
+  <tr>
+    <td><img src="assets/screenshots/light/16.PNG" width="250" /></td>
+    <td><img src="assets/screenshots/light/17.PNG" width="250" /></td>
+    <td><img src="assets/screenshots/light/18.PNG" width="250" /></td>
+  </tr>
+</table>
 
 ## How Notifications Work
 
