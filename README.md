@@ -60,8 +60,8 @@ A mobile application built with **React Native** (Expo) and **Firebase** that al
 
 1. Clone the repository  
    ```bash
-   git clone https://github.com/yourusername/job-finder-app.git
-   cd job-finder-app
+   git clone https://github.com/golnooshA/job_tracker.git
+   cd job_tracker
 
 2. Install dependencies
 
