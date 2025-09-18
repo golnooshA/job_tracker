@@ -1,5 +1,5 @@
 
-# Job Finder App
+# Job Tracker App
 
 A mobile application built with **React Native** (Expo) and **Firebase** that allows users to browse jobs, bookmark them, and receive notifications when new jobs are posted.
 
